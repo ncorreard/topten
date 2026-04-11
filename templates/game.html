@@ -51,6 +51,23 @@
         }
         .player-waiting { color: #aaa; font-style: italic; font-size: 13px; }
 
+        /* Your card */
+        .your-card-section {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            display: none;
+        }
+        .your-card-section h3 { margin: 0 0 12px 0; color: #333; }
+        .your-card-number {
+            font-size: 64px;
+            font-weight: bold;
+            color: #2196F3;
+            line-height: 1;
+        }
+
         /* Drawn cards */
         .cards-area {
             background: white;
@@ -173,6 +190,11 @@
         </div>
     </div>
 
+    <div class="your-card-section" id="yourCardSection">
+        <h3>Your card</h3>
+        <div class="your-card-number" id="yourCardNumber"></div>
+    </div>
+
     <div class="cards-area">
         <h3>Cards on the table</h3>
         <div class="drawn-cards" id="drawnCards">
@@ -213,6 +235,9 @@
         const playerName = '{{ player_name }}';
         let hasDrawn = {{ 'true' if players.get(player_name) is not none else 'false' }};
         let isRevealed = {{ 'true' if is_revealed else 'false' }};
+        const myCard = {{ players.get(player_name) | tojson }};
+
+        if (myCard !== null) showYourCard(myCard);
 
         // Invite link
         const joinUrl = window.location.origin + '/join/{{ game_key }}';
@@ -222,6 +247,11 @@
 
         // Apply reveal styles on page load if already revealed
         if (isRevealed) applyReveal();
+
+        function showYourCard(number) {
+            document.getElementById('yourCardNumber').textContent = number;
+            document.getElementById('yourCardSection').style.display = 'block';
+        }
 
         // ── Draw ──────────────────────────────────────────────────────────────
         async function drawCard() {
@@ -235,6 +265,7 @@
             const data = await response.json();
 
             hasDrawn = true;
+            showYourCard(data.card);
             document.getElementById('remaining').textContent = data.remaining;
             const btn = document.getElementById('drawBtn');
             btn.disabled = true;
