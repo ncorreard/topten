@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+*.env
+
+# IDE
+.idea/
+.vscode/
+
+# macOS
+.DS_Store
+
+# Flask instance folder
+instance/
+
+# Test / coverage
+.pytest_cache/
+.coverage
+coverage.xml

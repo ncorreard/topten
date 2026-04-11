@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Card Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        h1 { text-align: center; color: #333; }
+
+        .game-info {
+            background: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .game-info p { margin: 6px 0; }
+
+        .players-section {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .players-section h3 { margin: 0 0 12px 0; color: #333; }
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 5px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 15px;
+        }
+        .player-row:last-child { border-bottom: none; }
+        .player-name { font-weight: bold; min-width: 120px; }
+        .player-name.me { color: #0277bd; }
+        .badge-drew {
+            background: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            padding: 2px 8px;
+            font-size: 12px;
+        }
+        .player-waiting { color: #aaa; font-style: italic; font-size: 13px; }
+
+        /* Drawn cards */
+        .cards-area {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin: 20px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            min-height: 180px;
+        }
+        .cards-area h3 { margin: 0 0 15px 0; color: #333; }
+        .drawn-cards {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        .drawn-card {
+            width: 90px;
+            height: 130px;
+            background: linear-gradient(45deg, #2196F3, #1976D2);
+            border-radius: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            cursor: grab;
+            user-select: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transition: transform 0.15s, opacity 0.15s;
+            padding: 8px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        .drawn-card:active { cursor: grabbing; }
+        .drawn-card.dragging { opacity: 0.4; transform: scale(0.95); }
+        .drawn-card.drag-over { transform: scale(1.05); box-shadow: 0 6px 16px rgba(0,0,0,0.35); }
+        .drawn-card.revealed-card {
+            background: linear-gradient(45deg, #4CAF50, #388E3C);
+        }
+        .card-player-name {
+            font-size: 13px;
+            font-weight: bold;
+            word-break: break-word;
+        }
+        .card-number {
+            font-size: 32px;
+            font-weight: bold;
+            display: none;
+            margin-bottom: 4px;
+        }
+        .card-number-label {
+            font-size: 11px;
+            opacity: 0.8;
+            display: none;
+        }
+        .no-cards-yet {
+            color: #aaa;
+            font-style: italic;
+        }
+
+        /* Actions */
+        .actions { margin: 20px 0; display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+        .btn {
+            color: white;
+            border: none;
+            padding: 13px 26px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        .btn:disabled { background: #ccc !important; cursor: not-allowed; }
+        .btn-draw { background: #FF5722; }
+        .btn-draw:hover:not(:disabled) { background: #E64A19; }
+        .btn-reveal { background: #9C27B0; }
+        .btn-reveal:hover:not(:disabled) { background: #7B1FA2; }
+        .btn-reset { background: #4CAF50; }
+        .btn-reset:hover { background: #45a049; }
+        .btn-home {
+            background: #9E9E9E;
+            color: white;
+            border: none;
+            padding: 13px 26px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            display: inline-block;
+        }
+        .btn-home:hover { background: #757575; }
+
+        .status { font-size: 16px; color: #555; margin: 4px 0; }
+    </style>
+</head>
+<body>
+    <h1>🃏 Card Drawing Game</h1>
+
+    <div class="game-info">
+        <p><strong>Playing as:</strong> {{ player_name }}</p>
+        <p><strong>Invite link:</strong>
+            <a id="joinLink" href="/join/{{ game_key }}"></a>
+            <button onclick="copyLink()" style="margin-left:8px;padding:3px 10px;cursor:pointer;">Copy</button>
+        </p>
+    </div>
+
+    <div class="players-section">
+        <h3>Players</h3>
+        <div id="playersList">
+            {% for name, card in players.items() %}
+            <div class="player-row">
+                <span class="player-name {% if name == player_name %}me{% endif %}">
+                    {{ name }}{% if name == player_name %} (you){% endif %}
+                </span>
+                {% if card is not none %}
+                <span class="badge-drew">drew</span>
+                {% else %}
+                <span class="player-waiting">waiting...</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="cards-area">
+        <h3>Cards on the table</h3>
+        <div class="drawn-cards" id="drawnCards">
+            {% if drawn_order %}
+                {% for name in drawn_order %}
+                <div class="drawn-card {% if is_revealed %}revealed-card{% endif %}"
+                     draggable="true" data-player="{{ name }}">
+                    <div class="card-number">{{ players[name] }}</div>
+                    <div class="card-number-label">{{ name }}</div>
+                    <div class="card-player-name">{{ name }}</div>
+                </div>
+                {% endfor %}
+            {% else %}
+                <span class="no-cards-yet" id="noCardsMsg">No cards drawn yet</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <p class="status">Cards remaining: <span id="remaining">{{ available_cards }}</span></p>
+
+    <div class="actions">
+        <button class="btn btn-draw" id="drawBtn"
+            onclick="drawCard()"
+            {% if players.get(player_name) is not none %}disabled{% endif %}>
+            {% if players.get(player_name) is not none %}Already Drew{% else %}Draw a Card{% endif %}
+        </button>
+        <button class="btn btn-reveal" id="revealBtn"
+            onclick="revealCards()"
+            {% if is_revealed or not drawn_order %}disabled{% endif %}>
+            {% if is_revealed %}Revealed{% else %}Reveal{% endif %}
+        </button>
+        <button class="btn btn-reset" id="resetBtn" onclick="resetGame()">New Round</button>
+        <a href="/" class="btn-home">← Back to Home</a>
+    </div>
+
+    <script>
+        const gameKey = '{{ game_key }}';
+        const playerName = '{{ player_name }}';
+        let hasDrawn = {{ 'true' if players.get(player_name) is not none else 'false' }};
+        let isRevealed = {{ 'true' if is_revealed else 'false' }};
+
+        // Invite link
+        const joinUrl = window.location.origin + '/join/{{ game_key }}';
+        document.getElementById('joinLink').href = joinUrl;
+        document.getElementById('joinLink').textContent = joinUrl;
+        function copyLink() { navigator.clipboard.writeText(joinUrl); }
+
+        // Apply reveal styles on page load if already revealed
+        if (isRevealed) applyReveal();
+
+        // ── Draw ──────────────────────────────────────────────────────────────
+        async function drawCard() {
+            if (hasDrawn) return;
+            const response = await fetch(`/draw_card/${gameKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: playerName })
+            });
+            if (!response.ok) { alert((await response.json()).error); return; }
+            const data = await response.json();
+
+            hasDrawn = true;
+            document.getElementById('remaining').textContent = data.remaining;
+            const btn = document.getElementById('drawBtn');
+            btn.disabled = true;
+            btn.textContent = 'Already Drew';
+
+            addDrawnCard(playerName, data.card);
+
+            // enable reveal once at least one card is drawn
+            if (!isRevealed) document.getElementById('revealBtn').disabled = false;
+        }
+
+        // ── Reveal ────────────────────────────────────────────────────────────
+        async function revealCards() {
+            const response = await fetch(`/reveal/${gameKey}`, { method: 'POST' });
+            if (!response.ok) return;
+            isRevealed = true;
+            applyReveal();
+        }
+
+        function applyReveal() {
+            document.querySelectorAll('.drawn-card').forEach(card => {
+                card.classList.add('revealed-card');
+                card.querySelector('.card-number').style.display = 'block';
+                card.querySelector('.card-number-label').style.display = 'block';
+                card.querySelector('.card-player-name').style.display = 'none';
+            });
+            const btn = document.getElementById('revealBtn');
+            btn.disabled = true;
+            btn.textContent = 'Revealed';
+        }
+
+        // ── Reset ─────────────────────────────────────────────────────────────
+        async function resetGame() {
+            const response = await fetch(`/reset/${gameKey}`, { method: 'POST' });
+            if (response.ok) location.reload();
+        }
+
+        // ── Add a card to the table ───────────────────────────────────────────
+        function addDrawnCard(name, number) {
+            const container = document.getElementById('drawnCards');
+            const noMsg = document.getElementById('noCardsMsg');
+            if (noMsg) noMsg.remove();
+
+            const card = makeCardEl(name, number, isRevealed);
+            container.appendChild(card);
+        }
+
+        function makeCardEl(name, number, revealed) {
+            const card = document.createElement('div');
+            card.className = 'drawn-card' + (revealed ? ' revealed-card' : '');
+            card.draggable = true;
+            card.dataset.player = name;
+
+            const numEl = document.createElement('div');
+            numEl.className = 'card-number';
+            numEl.textContent = number;
+            numEl.style.display = revealed ? 'block' : 'none';
+
+            const numLabel = document.createElement('div');
+            numLabel.className = 'card-number-label';
+            numLabel.textContent = name;
+            numLabel.style.display = revealed ? 'block' : 'none';
+
+            const nameEl = document.createElement('div');
+            nameEl.className = 'card-player-name';
+            nameEl.textContent = name;
+            nameEl.style.display = revealed ? 'none' : 'block';
+
+            card.appendChild(numEl);
+            card.appendChild(numLabel);
+            card.appendChild(nameEl);
+            addDragHandlers(card);
+            return card;
+        }
+
+        // ── Drag and drop ─────────────────────────────────────────────────────
+        let dragSrc = null;
+
+        function addDragHandlers(card) {
+            card.addEventListener('dragstart', e => {
+                dragSrc = card;
+                card.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            });
+            card.addEventListener('dragend', () => {
+                card.classList.remove('dragging');
+                document.querySelectorAll('.drawn-card').forEach(c => c.classList.remove('drag-over'));
+            });
+            card.addEventListener('dragover', e => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                document.querySelectorAll('.drawn-card').forEach(c => c.classList.remove('drag-over'));
+                card.classList.add('drag-over');
+            });
+            card.addEventListener('drop', e => {
+                e.stopPropagation();
+                if (dragSrc && dragSrc !== card) {
+                    const container = document.getElementById('drawnCards');
+                    const cards = [...container.querySelectorAll('.drawn-card')];
+                    const srcIdx = cards.indexOf(dragSrc);
+                    const dstIdx = cards.indexOf(card);
+                    if (srcIdx < dstIdx) container.insertBefore(dragSrc, card.nextSibling);
+                    else container.insertBefore(dragSrc, card);
+                }
+            });
+        }
+
+        // attach handlers to server-rendered cards
+        document.querySelectorAll('.drawn-card').forEach(addDragHandlers);
+
+        // ── Players list ──────────────────────────────────────────────────────
+        function renderPlayers(players) {
+            const container = document.getElementById('playersList');
+            container.innerHTML = '';
+            for (const [name, card] of Object.entries(players)) {
+                const row = document.createElement('div');
+                row.className = 'player-row';
+                const nameSpan = document.createElement('span');
+                nameSpan.className = 'player-name' + (name === playerName ? ' me' : '');
+                nameSpan.textContent = name + (name === playerName ? ' (you)' : '');
+                row.appendChild(nameSpan);
+                if (card !== null) {
+                    const badge = document.createElement('span');
+                    badge.className = 'badge-drew';
+                    badge.textContent = 'drew';
+                    row.appendChild(badge);
+                } else {
+                    const wait = document.createElement('span');
+                    wait.className = 'player-waiting';
+                    wait.textContent = 'waiting...';
+                    row.appendChild(wait);
+                }
+                container.appendChild(row);
+            }
+        }
+
+        // ── Polling ───────────────────────────────────────────────────────────
+        setInterval(async function() {
+            try {
+                const response = await fetch(`/status/${gameKey}`);
+                const data = await response.json();
+
+                document.getElementById('remaining').textContent = data.available_cards;
+                renderPlayers(data.players);
+
+                // add any newly drawn cards from other players
+                const container = document.getElementById('drawnCards');
+                const existing = new Set([...container.querySelectorAll('.drawn-card')].map(c => c.dataset.player));
+                for (const name of data.drawn_order) {
+                    if (!existing.has(name)) {
+                        const noMsg = document.getElementById('noCardsMsg');
+                        if (noMsg) noMsg.remove();
+                        const card = makeCardEl(name, data.players[name], data.is_revealed);
+                        container.appendChild(card);
+                        existing.add(name);
+                        if (!isRevealed) document.getElementById('revealBtn').disabled = false;
+                    }
+                }
+
+                // apply reveal if triggered by someone else
+                if (data.is_revealed && !isRevealed) {
+                    isRevealed = true;
+                    applyReveal();
+                }
+            } catch (e) {
+                console.error('Status check error:', e);
+            }
+        }, 2000);
+    </script>
+</body>
+</html>

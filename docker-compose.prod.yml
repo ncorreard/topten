@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  card-game:
+    image: your-username/card-game:latest  # Replace with your image
+    ports:
+      - "8000:8000"
+    restart: unless-stopped
+    container_name: card-game
+    environment:
+      - FLASK_ENV=production

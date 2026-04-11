@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Join Game</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 500px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            background-color: #f0f0f0;
+            text-align: center;
+        }
+        h1 { color: #333; margin-bottom: 10px; }
+        .game-key {
+            font-family: monospace;
+            background: #e1f5fe;
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            color: #0277bd;
+            font-size: 18px;
+        }
+        .players-section {
+            background: white;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 25px 0;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            text-align: left;
+        }
+        .players-section h3 {
+            margin: 0 0 12px 0;
+            color: #333;
+        }
+        .player-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 16px;
+        }
+        .player-row:last-child { border-bottom: none; }
+        .player-name { font-weight: bold; }
+        .player-card {
+            background: #4CAF50;
+            color: white;
+            border-radius: 5px;
+            padding: 2px 10px;
+            font-weight: bold;
+        }
+        .player-waiting { color: #aaa; font-style: italic; }
+        .no-players { color: #aaa; font-style: italic; }
+        .join-box {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .join-box h2 { color: #2196F3; margin-top: 0; }
+        .name-input {
+            padding: 12px;
+            font-size: 16px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            width: 220px;
+            margin-bottom: 15px;
+        }
+        .name-input:focus { border-color: #2196F3; outline: none; }
+        .btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 13px 30px;
+            font-size: 17px;
+            border-radius: 5px;
+            cursor: pointer;
+            display: block;
+            width: 100%;
+        }
+        .btn:hover { background: #45a049; }
+    </style>
+</head>
+<body>
+    <h1>🃏 Card Drawing Game</h1>
+    <p>Game: <span class="game-key">{{ game_key }}</span></p>
+
+    <div class="players-section">
+        <h3>Already in this game</h3>
+        {% if players %}
+            {% for name, card in players.items() %}
+            <div class="player-row">
+                <span class="player-name">{{ name }}</span>
+                {% if card is not none %}
+                <span class="player-card">{{ card }}</span>
+                {% else %}
+                <span class="player-waiting">waiting...</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        {% else %}
+            <p class="no-players">No one has joined yet — be the first!</p>
+        {% endif %}
+    </div>
+
+    {% if full %}
+    <div class="join-box">
+        <p style="color:#f44336;font-size:17px;margin:0;">This game is full — 10 players maximum.</p>
+    </div>
+    {% else %}
+    <div class="join-box">
+        <h2>Join this game</h2>
+        {% if error %}<p style="color:#f44336;">{{ error }}</p>{% endif %}
+        <form action="/join_game" method="post">
+            <input type="hidden" name="game_key" value="{{ game_key }}">
+            <input type="text" name="player_name" placeholder="Your name" class="name-input" required autofocus>
+            <button type="submit" class="btn">Join Game</button>
+        </form>
+    </div>
+    {% endif %}
+</body>
+</html>
