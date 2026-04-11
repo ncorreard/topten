@@ -11,6 +11,10 @@ adjectives = ['red', 'blue', 'green', 'happy', 'bright', 'swift', 'calm', 'bold'
 animals = ['tiger', 'eagle', 'wolf', 'bear', 'fox', 'lion', 'hawk', 'shark', 'deer', 'owl']
 objects = ['mountain', 'river', 'castle', 'bridge', 'tower', 'garden', 'forest', 'valley', 'ocean', 'star']
 
+def sanitize_name(name):
+    name = name.strip()[:30]
+    return ''.join(c for c in name if c not in '"\'\\<>[]')
+
 def generate_game_key():
     adj = random.choice(adjectives)
     animal = random.choice(animals)
@@ -34,7 +38,7 @@ def create_game():
     game_key = generate_game_key()
     while game_key in games:
         game_key = generate_game_key()
-    player_name = request.form.get('player_name', '').strip() or 'Anonymous'
+    player_name = sanitize_name(request.form.get('player_name', '')) or 'Anonymous'
     games[game_key] = create_new_game()
     games[game_key]['players'][player_name] = None
     return redirect(url_for('game', game_key=game_key, player=player_name))
@@ -50,7 +54,7 @@ def join_page(game_key):
 @app.route('/join_game', methods=['POST'])
 def join_game():
     game_key = request.form.get('game_key', '').strip()
-    player_name = request.form.get('player_name', '').strip() or 'Anonymous'
+    player_name = sanitize_name(request.form.get('player_name', '')) or 'Anonymous'
     if game_key in games:
         if len(games[game_key]['players']) >= 10:
             return render_template('join.html', game_key=game_key, players=games[game_key]['players'], full=True, error='This game is full (10 players max).')
@@ -81,7 +85,7 @@ def draw_card(game_key):
 
     game_data = games[game_key]
     data = request.get_json() or {}
-    player_name = data.get('player_name', '')
+    player_name = sanitize_name(data.get('player_name', ''))
 
     if player_name and game_data['players'].get(player_name) is not None:
         return jsonify({'error': 'You have already drawn a card'}), 400

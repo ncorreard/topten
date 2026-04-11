@@ -448,7 +448,7 @@
                     const orderChanged = serverOrder.some((name, i) => name !== localOrder[i]);
                     if (orderChanged) {
                         serverOrder.forEach(name => {
-                            const card = container.querySelector(`[data-player="${name}"]`);
+                            const card = [...container.querySelectorAll('.drawn-card')].find(c => c.dataset.player === name);
                             if (card) container.appendChild(card);
                         });
                     }
