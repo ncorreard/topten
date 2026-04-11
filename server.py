@@ -129,5 +129,17 @@ def reveal_game(game_key):
     games[game_key]['is_revealed'] = True
     return jsonify({'is_revealed': True})
 
+@app.route('/reorder/<game_key>', methods=['POST'])
+def reorder(game_key):
+    if game_key not in games:
+        return jsonify({'error': 'Game not found'}), 404
+    data = request.get_json() or {}
+    new_order = data.get('order', [])
+    game_data = games[game_key]
+    # Only accept if it's a valid reordering of the existing drawn players
+    if set(new_order) == set(game_data['drawn_order']):
+        game_data['drawn_order'] = new_order
+    return jsonify({'drawn_order': game_data['drawn_order']})
+
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8000)

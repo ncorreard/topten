@@ -343,16 +343,32 @@
 
         // ── Drag and drop ─────────────────────────────────────────────────────
         let dragSrc = null;
+        let isDragging = false;
+
+        function currentOrder() {
+            return [...document.querySelectorAll('.drawn-card')].map(c => c.dataset.player);
+        }
+
+        async function postOrder() {
+            await fetch(`/reorder/${gameKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ order: currentOrder() })
+            });
+        }
 
         function addDragHandlers(card) {
             card.addEventListener('dragstart', e => {
                 dragSrc = card;
+                isDragging = true;
                 card.classList.add('dragging');
                 e.dataTransfer.effectAllowed = 'move';
             });
             card.addEventListener('dragend', () => {
+                isDragging = false;
                 card.classList.remove('dragging');
                 document.querySelectorAll('.drawn-card').forEach(c => c.classList.remove('drag-over'));
+                postOrder();
             });
             card.addEventListener('dragover', e => {
                 e.preventDefault();
@@ -422,6 +438,19 @@
                         container.appendChild(card);
                         existing.add(name);
                         if (!isRevealed) document.getElementById('revealBtn').disabled = false;
+                    }
+                }
+
+                // sync order from server (skip while user is dragging)
+                if (!isDragging && data.drawn_order.length > 1) {
+                    const serverOrder = data.drawn_order;
+                    const localOrder = currentOrder();
+                    const orderChanged = serverOrder.some((name, i) => name !== localOrder[i]);
+                    if (orderChanged) {
+                        serverOrder.forEach(name => {
+                            const card = container.querySelector(`[data-player="${name}"]`);
+                            if (card) container.appendChild(card);
+                        });
                     }
                 }
 
