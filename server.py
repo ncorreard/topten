@@ -98,9 +98,26 @@ def draw_card(game_key):
 
     if player_name:
         game_data['players'][player_name] = card
-        game_data['drawn_order'].append(player_name)
 
     return jsonify({'card': card, 'remaining': len(game_data['cards'])})
+
+@app.route('/put_down/<game_key>', methods=['POST'])
+def put_down_card(game_key):
+    if game_key not in games:
+        return jsonify({'error': 'Game not found'}), 404
+
+    game_data = games[game_key]
+    data = request.get_json() or {}
+    player_name = sanitize_name(data.get('player_name', ''))
+
+    if not player_name or game_data['players'].get(player_name) is None:
+        return jsonify({'error': 'No card to put down'}), 400
+
+    if player_name in game_data['drawn_order']:
+        return jsonify({'error': 'Card already on the table'}), 400
+
+    game_data['drawn_order'].append(player_name)
+    return jsonify({'success': True})
 
 @app.route('/status/<game_key>')
 def status(game_key):

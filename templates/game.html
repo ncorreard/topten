@@ -143,6 +143,8 @@
         .btn-draw:hover:not(:disabled) { background: #E64A19; }
         .btn-reveal { background: #9C27B0; }
         .btn-reveal:hover:not(:disabled) { background: #7B1FA2; }
+        .btn-putdown { background: #FF9800; }
+        .btn-putdown:hover:not(:disabled) { background: #F57C00; }
         .btn-reset { background: #4CAF50; }
         .btn-reset:hover { background: #45a049; }
         .btn-home {
@@ -221,6 +223,11 @@
             {% if players.get(player_name) is not none %}disabled{% endif %}>
             {% if players.get(player_name) is not none %}Already Drew{% else %}Draw a Card{% endif %}
         </button>
+        <button class="btn btn-putdown" id="putDownBtn"
+            onclick="putDownCard()"
+            {% if players.get(player_name) is none or player_name in drawn_order %}style="display:none"{% endif %}>
+            Put Card on Table
+        </button>
         <button class="btn btn-reveal" id="revealBtn"
             onclick="revealCards()"
             {% if is_revealed or not drawn_order %}disabled{% endif %}>
@@ -234,8 +241,9 @@
         const gameKey = '{{ game_key }}';
         const playerName = '{{ player_name }}';
         let hasDrawn = {{ 'true' if players.get(player_name) is not none else 'false' }};
+        let hasPutDown = {{ 'true' if player_name in drawn_order else 'false' }};
         let isRevealed = {{ 'true' if is_revealed else 'false' }};
-        const myCard = {{ players.get(player_name) | tojson }};
+        let myCard = {{ players.get(player_name) | tojson }};
 
         if (myCard !== null) showYourCard(myCard);
 
@@ -265,15 +273,33 @@
             const data = await response.json();
 
             hasDrawn = true;
+            myCard = data.card;
             showYourCard(data.card);
             document.getElementById('remaining').textContent = data.remaining;
             const btn = document.getElementById('drawBtn');
             btn.disabled = true;
             btn.textContent = 'Already Drew';
 
-            addDrawnCard(playerName, data.card);
+            document.getElementById('putDownBtn').style.display = '';
+        }
 
-            // enable reveal once at least one card is drawn
+        // ── Put Down ──────────────────────────────────────────────────────────
+        async function putDownCard() {
+            if (hasPutDown) return;
+            const response = await fetch(`/put_down/${gameKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player_name: playerName })
+            });
+            if (!response.ok) { alert((await response.json()).error); return; }
+
+            hasPutDown = true;
+            const btn = document.getElementById('putDownBtn');
+            btn.disabled = true;
+            btn.style.display = 'none';
+
+            addDrawnCard(playerName, myCard);
+
             if (!isRevealed) document.getElementById('revealBtn').disabled = false;
         }
 
@@ -344,6 +370,8 @@
         // ── Drag and drop ─────────────────────────────────────────────────────
         let dragSrc = null;
         let isDragging = false;
+        let touchDragSrc = null;
+        let touchClone = null;
 
         function currentOrder() {
             return [...document.querySelectorAll('.drawn-card')].map(c => c.dataset.player);
@@ -357,6 +385,40 @@
             });
         }
 
+        // Returns the card before which to insert at position x, or null to append at end.
+        // Handles out-of-bounds left (→ first) and right (→ last) correctly.
+        function getInsertBeforeEl(container, x, exclude) {
+            return [...container.querySelectorAll('.drawn-card')]
+                .filter(c => c !== exclude)
+                .reduce((closest, child) => {
+                    const box = child.getBoundingClientRect();
+                    const offset = x - (box.left + box.width / 2);
+                    if (offset < 0 && offset > closest.offset) return { offset, element: child };
+                    return closest;
+                }, { offset: -Infinity }).element ?? null;
+        }
+
+        function clearDragOver() {
+            document.querySelectorAll('.drawn-card').forEach(c => c.classList.remove('drag-over'));
+        }
+
+        // ── HTML5 drag (desktop) ──────────────────────────────────────────────
+        const drawnCardsEl = document.getElementById('drawnCards');
+
+        drawnCardsEl.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            clearDragOver();
+            const before = getInsertBeforeEl(drawnCardsEl, e.clientX, dragSrc);
+            if (before) before.classList.add('drag-over');
+        });
+
+        drawnCardsEl.addEventListener('drop', e => {
+            e.preventDefault();
+            if (!dragSrc) return;
+            drawnCardsEl.insertBefore(dragSrc, getInsertBeforeEl(drawnCardsEl, e.clientX, dragSrc));
+        });
+
         function addDragHandlers(card) {
             card.addEventListener('dragstart', e => {
                 dragSrc = card;
@@ -367,26 +429,89 @@
             card.addEventListener('dragend', () => {
                 isDragging = false;
                 card.classList.remove('dragging');
-                document.querySelectorAll('.drawn-card').forEach(c => c.classList.remove('drag-over'));
+                clearDragOver();
                 postOrder();
             });
-            card.addEventListener('dragover', e => {
-                e.preventDefault();
-                e.dataTransfer.dropEffect = 'move';
-                document.querySelectorAll('.drawn-card').forEach(c => c.classList.remove('drag-over'));
-                card.classList.add('drag-over');
+
+            // ── Touch drag (mobile) ───────────────────────────────────────────
+            let touchTimer = null;
+            let touchOriginX = 0, touchOriginY = 0;
+
+            card.addEventListener('touchstart', e => {
+                if (e.touches.length !== 1) return;
+                const touch = e.touches[0];
+                touchOriginX = touch.clientX;
+                touchOriginY = touch.clientY;
+                touchTimer = setTimeout(() => {
+                    touchTimer = null;
+                    startTouchDrag(card, touch);
+                }, 300);
             });
-            card.addEventListener('drop', e => {
-                e.stopPropagation();
-                if (dragSrc && dragSrc !== card) {
-                    const container = document.getElementById('drawnCards');
-                    const cards = [...container.querySelectorAll('.drawn-card')];
-                    const srcIdx = cards.indexOf(dragSrc);
-                    const dstIdx = cards.indexOf(card);
-                    if (srcIdx < dstIdx) container.insertBefore(dragSrc, card.nextSibling);
-                    else container.insertBefore(dragSrc, card);
+            card.addEventListener('touchmove', e => {
+                if (!touchTimer) return;
+                const t = e.touches[0];
+                if (Math.abs(t.clientX - touchOriginX) > 8 || Math.abs(t.clientY - touchOriginY) > 8) {
+                    clearTimeout(touchTimer);
+                    touchTimer = null;
                 }
             });
+            card.addEventListener('touchend', () => { clearTimeout(touchTimer); touchTimer = null; });
+            card.addEventListener('touchcancel', () => { clearTimeout(touchTimer); touchTimer = null; });
+        }
+
+        // ── Touch drag implementation ─────────────────────────────────────────
+        function startTouchDrag(card, initialTouch) {
+            touchDragSrc = card;
+            isDragging = true;
+            const rect = card.getBoundingClientRect();
+            touchClone = card.cloneNode(true);
+            Object.assign(touchClone.style, {
+                position: 'fixed', zIndex: '1000', pointerEvents: 'none',
+                opacity: '0.85', margin: '0', transition: 'none',
+                width: rect.width + 'px', height: rect.height + 'px',
+                left: rect.left + 'px', top: rect.top + 'px',
+                transform: 'scale(1.08)', boxShadow: '0 8px 24px rgba(0,0,0,0.4)'
+            });
+            document.body.appendChild(touchClone);
+            card.style.opacity = '0.3';
+            document.addEventListener('touchmove', onTouchMove, { passive: false });
+            document.addEventListener('touchend', onTouchEnd);
+            document.addEventListener('touchcancel', onTouchEnd);
+        }
+
+        function onTouchMove(e) {
+            if (!touchDragSrc) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            touchClone.style.left = (touch.clientX - parseFloat(touchClone.style.width) / 2) + 'px';
+            touchClone.style.top  = (touch.clientY - parseFloat(touchClone.style.height) / 2) + 'px';
+            touchClone.style.visibility = 'hidden';
+            const below = document.elementFromPoint(touch.clientX, touch.clientY);
+            touchClone.style.visibility = '';
+            clearDragOver();
+            const target = below?.closest?.('.drawn-card');
+            if (target && target !== touchDragSrc) target.classList.add('drag-over');
+        }
+
+        function onTouchEnd(e) {
+            document.removeEventListener('touchmove', onTouchMove);
+            document.removeEventListener('touchend', onTouchEnd);
+            document.removeEventListener('touchcancel', onTouchEnd);
+            if (!touchDragSrc) return;
+            const isCancel = e.type === 'touchcancel';
+            if (!isCancel) {
+                const touch = e.changedTouches[0];
+                touchClone.style.visibility = 'hidden';
+                drawnCardsEl.insertBefore(touchDragSrc, getInsertBeforeEl(drawnCardsEl, touch.clientX, touchDragSrc));
+                touchClone.style.visibility = '';
+            }
+            clearDragOver();
+            document.body.removeChild(touchClone);
+            touchClone = null;
+            touchDragSrc.style.opacity = '';
+            touchDragSrc = null;
+            isDragging = false;
+            if (!isCancel) postOrder();
         }
 
         // attach handlers to server-rendered cards
